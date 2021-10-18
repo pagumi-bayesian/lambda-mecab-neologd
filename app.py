@@ -25,9 +25,19 @@ def lambda_handler(event, context):
     bucket_read = s3.Bucket('googlenews-store')
     bucket_write = s3.Bucket('news-keitaiso')
 
+    # 全角を半角に変換するための辞書
+    ZEN = "".join(chr(0xff01 + i) for i in range(94))
+    HAN = "".join(chr(0x21 + i) for i in range(94))
+    ZEN2HAN = str.maketrans(ZEN, HAN)
+    
+    # 検索ワードの指定
+    keyword = event['body']['word']
+    keyword = keyword.translate(ZEN2HAN).lower() # 全部半角&小文字で統一
+    print(keyword)
+
     # 読み込むオブジェクト一覧
     print('Reading...')
-    list_objects = bucket_read.meta.client.list_objects_v2(Bucket=bucket_read.name, Prefix='dx/').get('Contents')
+    list_objects = bucket_read.meta.client.list_objects_v2(Bucket=bucket_read.name, Prefix=f'{keyword}/').get('Contents')
 
     # オブジェクトを一時的に保存
     for o in list_objects:
@@ -71,12 +81,8 @@ def lambda_handler(event, context):
     df_result.to_csv(dir_write, index=False, encoding='utf-8')
     
     # 書き込み用s3に保存
-    bucket_write.upload_file(dir_write, 'dx/' + filename_write) # S3に格納
+    bucket_write.upload_file(dir_write, f'{keyword}/' + filename_write) # S3に格納
         
     os.remove(dir_write)
     
-    return {
-        'isBase64Encoded': False,
-        'statusCode': 200,
-        'body': df_result.to_json(force_ascii=False, orient='index')
-    }
+    return df_result.to_dict(orient='list')
